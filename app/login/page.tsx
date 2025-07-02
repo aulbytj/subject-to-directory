@@ -11,18 +11,24 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Home, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { useAuthContext } from '@/components/auth-provider';
 import { toast } from 'sonner';
-import { ProtectedRoute } from '@/components/protected-route';
 
-function LoginPageContent() {
+export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { signIn, loading } = useAuthContext();
+  const { signIn, loading, user } = useAuthContext();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   
   // Get redirect URL from query parameters
   const redirectTo = searchParams.get('redirectTo') || '/dashboard';
+
+  // Redirect authenticated users away from login page
+  useEffect(() => {
+    if (user && !loading) {
+      router.push(redirectTo);
+    }
+  }, [user, loading, router, redirectTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +39,7 @@ function LoginPageContent() {
     }
 
     try {
-      const { data, error } = await signIn(email, password);
+      const { error } = await signIn(email, password);
 
       if (error) {
         toast.error(error.message);
@@ -47,6 +53,22 @@ function LoginPageContent() {
       toast.error('An unexpected error occurred');
     }
   };
+
+  // Show loading while checking authentication or redirecting
+  if (loading || user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center px-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="flex flex-col items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+            <p className="text-gray-600">
+              {user ? 'Redirecting...' : 'Loading...'}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center px-4">
@@ -138,13 +160,5 @@ function LoginPageContent() {
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <ProtectedRoute requireAuth={false}>
-      <LoginPageContent />
-    </ProtectedRoute>
   );
 }
