@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,10 +15,14 @@ import { ProtectedRoute } from '@/components/protected-route';
 
 function LoginPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { signIn, loading } = useAuthContext();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  
+  // Get redirect URL from query parameters
+  const redirectTo = searchParams.get('redirectTo') || '/dashboard';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +41,8 @@ function LoginPageContent() {
       }
 
       toast.success('Signed in successfully!');
-      router.push('/');
+      // Redirect to the originally requested page or dashboard
+      router.push(redirectTo);
     } catch (error) {
       toast.error('An unexpected error occurred');
     }

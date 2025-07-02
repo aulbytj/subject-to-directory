@@ -29,7 +29,8 @@ import {
   Shield,
   Building,
   CreditCard,
-  Clock
+  Clock,
+  Lock
 } from 'lucide-react';
 import Link from 'next/link';
 import { properties } from '@/lib/properties';
@@ -41,7 +42,7 @@ import { toast } from 'sonner';
 export default function PropertyDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { user } = useAuthContext();
+  const { user, loading: authLoading } = useAuthContext();
   const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFavorited, setIsFavorited] = useState(false);
@@ -50,8 +51,16 @@ export default function PropertyDetailPage() {
 
   const propertyId = params.id as string;
 
+  // Redirect anonymous users to login page
   useEffect(() => {
-    if (propertyId) {
+    if (!authLoading && !user) {
+      router.push('/login?redirectTo=' + encodeURIComponent(`/property/${propertyId}`));
+      return;
+    }
+  }, [authLoading, user, router, propertyId]);
+
+  useEffect(() => {
+    if (propertyId && user) {
       loadProperty();
       checkFavoriteStatus();
     }
@@ -156,6 +165,51 @@ export default function PropertyDetailPage() {
                          (property.hoa_fees || 0);
     return (property.monthly_rent || 0) - totalExpenses;
   };
+
+  // Show loading while checking authentication
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h2 className="text-xl font-semibold mb-2">Loading...</h2>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login prompt for anonymous users
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto">
+          <Lock className="h-16 w-16 text-blue-600 mx-auto mb-6" />
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Login Required</h2>
+          <p className="text-gray-600 mb-6">
+            Please sign in to view detailed property information and contact sellers.
+          </p>
+          <div className="space-y-3">
+            <Button asChild className="w-full">
+              <Link href={`/login?redirectTo=${encodeURIComponent(`/property/${propertyId}`)}`}>
+                Sign In
+              </Link>
+            </Button>
+            <Button variant="outline" asChild className="w-full">
+              <Link href="/signup">
+                Create Account
+              </Link>
+            </Button>
+            <Button variant="ghost" asChild className="w-full">
+              <Link href="/search">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Search
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
