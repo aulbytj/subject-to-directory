@@ -1,8 +1,10 @@
-import { getSupabaseClient } from './supabase-client';
+import { getPublicSupabaseClient, getAuthenticatedSupabaseClient } from './supabase-client';
 import { Property } from './supabase';
 
-// Use the authenticated client
-const supabase = getSupabaseClient();
+// Use public client for reading properties (marketplace browsing)
+const publicSupabase = getPublicSupabaseClient();
+// Use authenticated client for user operations
+const authSupabase = getAuthenticatedSupabaseClient();
 
 export interface PropertyFilters {
   city?: string;
@@ -17,9 +19,9 @@ export interface PropertyFilters {
 }
 
 export const properties = {
-  // Get all active properties with optional filters
+  // Get all active properties with optional filters (PUBLIC - no auth required)
   async getProperties(filters?: PropertyFilters, limit = 50, offset = 0) {
-    let query = supabase
+    let query = publicSupabase
       .from('properties')
       .select(`
         *,
@@ -72,9 +74,9 @@ export const properties = {
     return { data: data as Property[], error };
   },
 
-  // Get single property by ID
+  // Get single property by ID (PUBLIC - no auth required)
   async getProperty(id: string) {
-    const { data, error } = await supabase
+    const { data, error } = await publicSupabase
       .from('properties')
       .select(`
         *,
@@ -100,9 +102,9 @@ export const properties = {
     return { data: data as Property, error };
   },
 
-  // Create new property
+  // Create new property (AUTHENTICATED - requires login)
   async createProperty(property: Partial<Property>) {
-    const { data, error } = await supabase
+    const { data, error } = await authSupabase
       .from('properties')
       .insert([property])
       .select()
@@ -111,9 +113,9 @@ export const properties = {
     return { data: data as Property, error };
   },
 
-  // Update property
+  // Update property (AUTHENTICATED - requires login)
   async updateProperty(id: string, updates: Partial<Property>) {
-    const { data, error } = await supabase
+    const { data, error } = await authSupabase
       .from('properties')
       .update(updates)
       .eq('id', id)
@@ -123,9 +125,9 @@ export const properties = {
     return { data: data as Property, error };
   },
 
-  // Delete property
+  // Delete property (AUTHENTICATED - requires login)
   async deleteProperty(id: string) {
-    const { error } = await supabase
+    const { error } = await authSupabase
       .from('properties')
       .delete()
       .eq('id', id);
@@ -133,16 +135,16 @@ export const properties = {
     return { error };
   },
 
-  // Increment property view count
+  // Increment property view count (PUBLIC - no auth required)
   async incrementViewCount(propertyId: string) {
-    const { error } = await supabase.rpc('increment_property_views', {
+    const { error } = await publicSupabase.rpc('increment_property_views', {
       property_uuid: propertyId
     });
 
     return { error };
   },
 
-  // Upload property images to Supabase Storage and save metadata
+  // Upload property images to Supabase Storage and save metadata (AUTHENTICATED)
   async uploadPropertyImages(propertyId: string, imageFiles: { file: File; is_primary: boolean }[]) {
     const uploadedImages = [];
     
@@ -155,7 +157,7 @@ export const properties = {
       
       try {
         // Upload to Supabase Storage
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { data: uploadData, error: uploadError } = await authSupabase.storage
           .from('property-images')
           .upload(fileName, file, {
             cacheControl: '3600',
@@ -168,12 +170,12 @@ export const properties = {
         }
 
         // Get public URL
-        const { data: urlData } = supabase.storage
+        const { data: urlData } = authSupabase.storage
           .from('property-images')
           .getPublicUrl(fileName);
 
         // Save image metadata to database
-        const { data: imageData, error: imageError } = await supabase
+        const { data: imageData, error: imageError } = await authSupabase
           .from('property_images')
           .insert([{
             property_id: propertyId,
@@ -188,7 +190,7 @@ export const properties = {
         if (imageError) {
           console.error('Image metadata save error:', imageError);
           // Try to clean up uploaded file
-          await supabase.storage.from('property-images').remove([fileName]);
+          await authSupabase.storage.from('property-images').remove([fileName]);
           continue;
         }
 
@@ -202,9 +204,9 @@ export const properties = {
     return { data: uploadedImages, error: uploadedImages.length === 0 ? new Error('No images uploaded successfully') : null };
   },
 
-  // Get user's properties
+  // Get user's properties (AUTHENTICATED - requires login)
   async getUserProperties(userId: string) {
-    const { data, error } = await supabase
+    const { data, error } = await authSupabase
       .from('properties')
       .select(`
         *,

@@ -4,20 +4,35 @@ import type { Database } from './database.types';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-// Create a single instance for the entire app
-let supabaseInstance: ReturnType<typeof createBrowserClient<Database>> | null = null;
+// Create instances for different use cases
+let publicSupabaseInstance: ReturnType<typeof createBrowserClient<Database>> | null = null;
+let authSupabaseInstance: ReturnType<typeof createBrowserClient<Database>> | null = null;
 
-export function getSupabaseClient() {
-  if (!supabaseInstance) {
-    supabaseInstance = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
+// Public client for anonymous property viewing (marketplace browsing)
+export function getPublicSupabaseClient() {
+  if (!publicSupabaseInstance) {
+    publicSupabaseInstance = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
   }
-  return supabaseInstance;
+  return publicSupabaseInstance;
+}
+
+// Authenticated client for user-specific operations (creating, editing, favorites)
+export function getAuthenticatedSupabaseClient() {
+  if (!authSupabaseInstance) {
+    authSupabaseInstance = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
+  }
+  return authSupabaseInstance;
+}
+
+// Default client (public for marketplace functionality)
+export function getSupabaseClient() {
+  return getPublicSupabaseClient();
 }
 
 // For use in React components where we need the authenticated client
 export function useSupabaseClient() {
-  return getSupabaseClient();
+  return getAuthenticatedSupabaseClient();
 }
 
-// Legacy export for backward compatibility
-export const supabase = getSupabaseClient();
+// Legacy export for backward compatibility (now uses public client)
+export const supabase = getPublicSupabaseClient();
