@@ -10,9 +10,11 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { User, Save, AlertCircle } from 'lucide-react';
 import { useAuthContext } from '@/components/auth-provider';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseClient } from '@/lib/supabase-client';
 import { toast } from 'sonner';
 import { ProtectedRoute } from '@/components/protected-route';
+
+const supabase = getSupabaseClient();
 
 function ProfilePageContent() {
   const { profile, user } = useAuthContext();

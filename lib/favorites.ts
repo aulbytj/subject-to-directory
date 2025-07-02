@@ -1,4 +1,7 @@
-import { supabase, Favorite } from './supabase';
+import { getSupabaseClient } from './supabase-client';
+import { Favorite } from './supabase';
+
+const supabase = getSupabaseClient();
 
 export const favorites = {
   // Add property to favorites

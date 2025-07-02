@@ -11,6 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { CurrencyInput } from '@/components/ui/currency-input';
+import { PercentageInput } from '@/components/ui/percentage-input';
+import { YearsInput } from '@/components/ui/years-input';
 import { 
   Home, 
   DollarSign, 
@@ -61,6 +64,12 @@ interface PropertyFormData {
   due_on_sale_clause: boolean;
 }
 
+interface PropertyImage {
+  file: File;
+  preview: string;
+  is_primary: boolean;
+}
+
 const initialFormData: PropertyFormData = {
   title: '',
   description: '',
@@ -94,8 +103,9 @@ export default function ListPropertyPage() {
   const [formData, setFormData] = useState<PropertyFormData>(initialFormData);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [images, setImages] = useState<PropertyImage[]>([]);
 
-  const totalSteps = 4;
+  const totalSteps = 5;
 
   // Handle form input changes
   const handleInputChange = (field: keyof PropertyFormData) => (
@@ -104,6 +114,27 @@ export default function ListPropertyPage() {
     const value = e.target.type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value;
     setFormData(prev => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  };
+
+  const handleCurrencyChange = (field: keyof PropertyFormData) => (value: number) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  };
+
+  const handlePercentageChange = (field: keyof PropertyFormData) => (value: number) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  };
+
+  const handleYearsChange = (field: keyof PropertyFormData) => (value: number) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
@@ -153,6 +184,10 @@ export default function ListPropertyPage() {
         if (!formData.lender.trim()) newErrors.lender = 'Lender is required';
         if (formData.years_remaining <= 0) newErrors.years_remaining = 'Years remaining must be greater than 0';
         break;
+      
+      case 5: // Images (optional)
+        // No validation required for images as they're optional
+        break;
     }
 
     setErrors(newErrors);
@@ -182,6 +217,7 @@ export default function ListPropertyPage() {
     setLoading(true);
     
     try {
+      // First create the property
       const propertyData = {
         ...formData,
         user_id: user.id,
@@ -190,12 +226,27 @@ export default function ListPropertyPage() {
         view_count: 0,
       };
 
-      const { data, error } = await properties.createProperty(propertyData);
+      const { data: property, error: propertyError } = await properties.createProperty(propertyData);
       
-      if (error) {
-        toast.error('Failed to create property listing');
-        console.error('Property creation error:', error);
+      if (propertyError) {
+        console.error('Property creation error:', propertyError);
+        toast.error(`Failed to create property listing: ${propertyError.message || 'Unknown error'}`);
         return;
+      }
+
+      if (!property) {
+        toast.error('Failed to create property listing: No property returned');
+        return;
+      }
+
+      // Handle image uploads if any
+      if (images.length > 0) {
+        try {
+          await uploadPropertyImages(property.id, images);
+        } catch (imageError) {
+          console.warn('Image upload failed:', imageError);
+          toast.error('Property created but image upload failed');
+        }
       }
 
       toast.success('Property listed successfully!');
@@ -238,8 +289,61 @@ export default function ListPropertyPage() {
     'Basic Information',
     'Property Details', 
     'Financial Information',
-    'Loan Details'
+    'Loan Details',
+    'Images'
   ];
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const validFiles = files.filter(file => 
+      file.type.startsWith('image/') && file.size <= 5 * 1024 * 1024
+    );
+
+    if (validFiles.length !== files.length) {
+      toast.error('Some files were skipped. Only images under 5MB are allowed.');
+    }
+
+    const newImages: PropertyImage[] = validFiles.map((file, index) => ({
+      file,
+      preview: URL.createObjectURL(file),
+      is_primary: images.length === 0 && index === 0
+    }));
+
+    setImages(prev => [...prev, ...newImages]);
+  };
+
+  const removeImage = (index: number) => {
+    setImages(prev => {
+      const updated = prev.filter((_, i) => i !== index);
+      // If we removed the primary image, make the first remaining image primary
+      if (prev[index].is_primary && updated.length > 0) {
+        updated[0].is_primary = true;
+      }
+      return updated;
+    });
+  };
+
+  const setPrimaryImage = (index: number) => {
+    setImages(prev => prev.map((img, i) => ({
+      ...img,
+      is_primary: i === index
+    })));
+  };
+
+  const uploadPropertyImages = async (propertyId: string, propertyImages: PropertyImage[]) => {
+    const imageFiles = propertyImages.map(img => ({
+      file: img.file,
+      is_primary: img.is_primary
+    }));
+
+    const { data, error } = await properties.uploadPropertyImages(propertyId, imageFiles);
+    
+    if (error) {
+      throw error;
+    }
+    
+    return data;
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -303,6 +407,7 @@ export default function ListPropertyPage() {
                 {currentStep === 2 && "Provide specific details about the property"}
                 {currentStep === 3 && "Share the financial information for your property"}
                 {currentStep === 4 && "Final details about the existing loan"}
+                {currentStep === 5 && "Add photos to showcase your property (optional)"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -472,13 +577,10 @@ export default function ListPropertyPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="current_loan_balance">Current Loan Balance</Label>
-                      <Input
+                      <CurrencyInput
                         id="current_loan_balance"
-                        type="number"
-                        min="0"
                         value={formData.current_loan_balance}
-                        onChange={handleInputChange('current_loan_balance')}
-                        placeholder="250000"
+                        onChange={handleCurrencyChange('current_loan_balance')}
                         className={errors.current_loan_balance ? 'border-red-500' : ''}
                       />
                       {errors.current_loan_balance && (
@@ -486,15 +588,11 @@ export default function ListPropertyPage() {
                       )}
                     </div>
                     <div>
-                      <Label htmlFor="interest_rate">Interest Rate (%)</Label>
-                      <Input
+                      <Label htmlFor="interest_rate">Interest Rate</Label>
+                      <PercentageInput
                         id="interest_rate"
-                        type="number"
-                        min="0"
-                        step="0.01"
                         value={formData.interest_rate}
-                        onChange={handleInputChange('interest_rate')}
-                        placeholder="3.5"
+                        onChange={handlePercentageChange('interest_rate')}
                         className={errors.interest_rate ? 'border-red-500' : ''}
                       />
                       {errors.interest_rate && (
@@ -506,13 +604,10 @@ export default function ListPropertyPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="monthly_payment">Monthly Payment</Label>
-                      <Input
+                      <CurrencyInput
                         id="monthly_payment"
-                        type="number"
-                        min="0"
                         value={formData.monthly_payment}
-                        onChange={handleInputChange('monthly_payment')}
-                        placeholder="1200"
+                        onChange={handleCurrencyChange('monthly_payment')}
                         className={errors.monthly_payment ? 'border-red-500' : ''}
                       />
                       {errors.monthly_payment && (
@@ -521,13 +616,10 @@ export default function ListPropertyPage() {
                     </div>
                     <div>
                       <Label htmlFor="asking_price">Asking Price</Label>
-                      <Input
+                      <CurrencyInput
                         id="asking_price"
-                        type="number"
-                        min="0"
                         value={formData.asking_price}
-                        onChange={handleInputChange('asking_price')}
-                        placeholder="300000"
+                        onChange={handleCurrencyChange('asking_price')}
                         className={errors.asking_price ? 'border-red-500' : ''}
                       />
                       {errors.asking_price && (
@@ -539,13 +631,10 @@ export default function ListPropertyPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="property_value">Current Property Value</Label>
-                      <Input
+                      <CurrencyInput
                         id="property_value"
-                        type="number"
-                        min="0"
                         value={formData.property_value}
-                        onChange={handleInputChange('property_value')}
-                        placeholder="320000"
+                        onChange={handleCurrencyChange('property_value')}
                         className={errors.property_value ? 'border-red-500' : ''}
                       />
                       {errors.property_value && (
@@ -554,13 +643,10 @@ export default function ListPropertyPage() {
                     </div>
                     <div>
                       <Label htmlFor="monthly_rent">Potential Monthly Rent</Label>
-                      <Input
+                      <CurrencyInput
                         id="monthly_rent"
-                        type="number"
-                        min="0"
                         value={formData.monthly_rent}
-                        onChange={handleInputChange('monthly_rent')}
-                        placeholder="1800"
+                        onChange={handleCurrencyChange('monthly_rent')}
                       />
                     </div>
                   </div>
@@ -568,35 +654,26 @@ export default function ListPropertyPage() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <Label htmlFor="property_taxes">Monthly Property Taxes</Label>
-                      <Input
+                      <CurrencyInput
                         id="property_taxes"
-                        type="number"
-                        min="0"
                         value={formData.property_taxes}
-                        onChange={handleInputChange('property_taxes')}
-                        placeholder="400"
+                        onChange={handleCurrencyChange('property_taxes')}
                       />
                     </div>
                     <div>
                       <Label htmlFor="insurance">Monthly Insurance</Label>
-                      <Input
+                      <CurrencyInput
                         id="insurance"
-                        type="number"
-                        min="0"
                         value={formData.insurance}
-                        onChange={handleInputChange('insurance')}
-                        placeholder="150"
+                        onChange={handleCurrencyChange('insurance')}
                       />
                     </div>
                     <div>
                       <Label htmlFor="hoa_fees">Monthly HOA Fees</Label>
-                      <Input
+                      <CurrencyInput
                         id="hoa_fees"
-                        type="number"
-                        min="0"
                         value={formData.hoa_fees}
-                        onChange={handleInputChange('hoa_fees')}
-                        placeholder="0"
+                        onChange={handleCurrencyChange('hoa_fees')}
                       />
                     </div>
                   </div>
@@ -637,13 +714,10 @@ export default function ListPropertyPage() {
 
                   <div>
                     <Label htmlFor="years_remaining">Years Remaining on Loan</Label>
-                    <Input
+                    <YearsInput
                       id="years_remaining"
-                      type="number"
-                      min="1"
                       value={formData.years_remaining}
-                      onChange={handleInputChange('years_remaining')}
-                      placeholder="27"
+                      onChange={handleYearsChange('years_remaining')}
                       className={errors.years_remaining ? 'border-red-500' : ''}
                     />
                     {errors.years_remaining && (
@@ -669,6 +743,90 @@ export default function ListPropertyPage() {
                       Please verify this information with your lender or loan documents.
                     </AlertDescription>
                   </Alert>
+                </div>
+              )}
+
+              {/* Step 5: Images */}
+              {currentStep === 5 && (
+                <div className="space-y-6">
+                  <div>
+                    <Label htmlFor="images" className="text-base font-medium">Property Images</Label>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Upload high-quality photos to showcase your property. The first image will be used as the primary photo.
+                    </p>
+                    
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                      <Camera className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                      <Label htmlFor="image-upload" className="cursor-pointer">
+                        <span className="text-blue-600 hover:text-blue-500 font-medium">
+                          Click to upload images
+                        </span>
+                        <span className="text-gray-500"> or drag and drop</span>
+                      </Label>
+                      <Input
+                        id="image-upload"
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                      />
+                      <p className="text-xs text-gray-500 mt-2">
+                        PNG, JPG up to 5MB each. Maximum 10 images.
+                      </p>
+                    </div>
+                  </div>
+
+                  {images.length > 0 && (
+                    <div>
+                      <Label className="text-base font-medium">Uploaded Images</Label>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
+                        {images.map((image, index) => (
+                          <div key={index} className="relative group">
+                            <div className="aspect-square rounded-lg overflow-hidden border-2 border-gray-200">
+                              <img
+                                src={image.preview}
+                                alt={`Property image ${index + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                            
+                            {image.is_primary && (
+                              <Badge className="absolute top-2 left-2 bg-blue-600">
+                                Primary
+                              </Badge>
+                            )}
+                            
+                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => removeImage(index)}
+                                className="h-8 w-8 p-0"
+                              >
+                                ×
+                              </Button>
+                            </div>
+                            
+                            {!image.is_primary && (
+                              <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => setPrimaryImage(index)}
+                                  className="text-xs h-6"
+                                >
+                                  Set Primary
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

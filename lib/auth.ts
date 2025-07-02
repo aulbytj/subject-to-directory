@@ -1,4 +1,6 @@
-import { supabase } from './supabase';
+import { getSupabaseClient } from './supabase-client';
+
+const supabase = getSupabaseClient();
 
 export interface SignUpData {
   email: string;

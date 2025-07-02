@@ -1,4 +1,8 @@
-import { supabase, Property } from './supabase';
+import { getSupabaseClient } from './supabase-client';
+import { Property } from './supabase';
+
+// Use the authenticated client
+const supabase = getSupabaseClient();
 
 export interface PropertyFilters {
   city?: string;
@@ -136,6 +140,66 @@ export const properties = {
     });
 
     return { error };
+  },
+
+  // Upload property images to Supabase Storage and save metadata
+  async uploadPropertyImages(propertyId: string, imageFiles: { file: File; is_primary: boolean }[]) {
+    const uploadedImages = [];
+    
+    for (let i = 0; i < imageFiles.length; i++) {
+      const { file, is_primary } = imageFiles[i];
+      
+      // Generate unique filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${propertyId}/${Date.now()}-${i}.${fileExt}`;
+      
+      try {
+        // Upload to Supabase Storage
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('property-images')
+          .upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (uploadError) {
+          console.error('Image upload error:', uploadError);
+          continue; // Skip this image and continue with others
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('property-images')
+          .getPublicUrl(fileName);
+
+        // Save image metadata to database
+        const { data: imageData, error: imageError } = await supabase
+          .from('property_images')
+          .insert([{
+            property_id: propertyId,
+            image_url: urlData.publicUrl,
+            is_primary: is_primary,
+            order_index: i,
+            caption: null
+          }])
+          .select()
+          .single();
+
+        if (imageError) {
+          console.error('Image metadata save error:', imageError);
+          // Try to clean up uploaded file
+          await supabase.storage.from('property-images').remove([fileName]);
+          continue;
+        }
+
+        uploadedImages.push(imageData);
+      } catch (error) {
+        console.error('Error processing image:', error);
+        continue;
+      }
+    }
+
+    return { data: uploadedImages, error: uploadedImages.length === 0 ? new Error('No images uploaded successfully') : null };
   },
 
   // Get user's properties

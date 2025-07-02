@@ -1,4 +1,7 @@
-import { supabase, Message } from './supabase';
+import { getSupabaseClient } from './supabase-client';
+import { Message } from './supabase';
+
+const supabase = getSupabaseClient();
 
 export interface SendMessageData {
   propertyId: string;

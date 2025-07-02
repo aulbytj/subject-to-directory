@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { 
   Select,
   SelectContent,
@@ -22,75 +23,140 @@ import {
   ArrowRight
 } from 'lucide-react';
 import Link from 'next/link';
+import { properties, PropertyFilters } from '@/lib/properties';
+import { Property } from '@/lib/supabase';
+import { toast } from 'sonner';
 
 export default function SearchPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [priceRange, setPriceRange] = useState('');
   const [propertyType, setPropertyType] = useState('');
   const [interestRate, setInterestRate] = useState('');
+  const [listings, setListings] = useState<Property[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filteredCount, setFilteredCount] = useState(0);
 
-  const sampleListings = [
-    {
-      id: 1,
-      address: "123 Maple St, Austin, TX 78701",
-      type: "Single Family",
-      bedrooms: 3,
-      bathrooms: 2,
-      sqft: 1850,
-      currentBalance: 285000,
-      interestRate: 2.8,
-      monthlyPayment: 1240,
-      askingPrice: 320000,
-      daysListed: 5,
-      verified: true,
-      image: "https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg?auto=compress&cs=tinysrgb&w=800"
-    },
-    {
-      id: 2,
-      address: "456 Oak Ave, Denver, CO 80202",
-      type: "Townhouse",
-      bedrooms: 4,
-      bathrooms: 3,
-      sqft: 2200,
-      currentBalance: 340000,
-      interestRate: 3.2,
-      monthlyPayment: 1580,
-      askingPrice: 380000,
-      daysListed: 12,
-      verified: true,
-      image: "https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg?auto=compress&cs=tinysrgb&w=800"
-    },
-    {
-      id: 3,
-      address: "789 Pine Rd, Phoenix, AZ 85001",
-      type: "Single Family",
-      bedrooms: 2,
-      bathrooms: 2,
-      sqft: 1450,
-      currentBalance: 220000,
-      interestRate: 2.5,
-      monthlyPayment: 980,
-      askingPrice: 265000,
-      daysListed: 8,
-      verified: false,
-      image: "https://images.pexels.com/photos/1438832/pexels-photo-1438832.jpeg?auto=compress&cs=tinysrgb&w=800"
-    },
-    {
-      id: 4,
-      address: "321 Elm Dr, Miami, FL 33101",
-      type: "Condo",
-      bedrooms: 2,
-      bathrooms: 2,
-      sqft: 1200,
-      currentBalance: 195000,
-      interestRate: 3.1,
-      monthlyPayment: 850,
-      askingPrice: 235000,
-      daysListed: 3,
-      verified: true,
-      image: "https://images.pexels.com/photos/1643383/pexels-photo-1643383.jpeg?auto=compress&cs=tinysrgb&w=800"
+  // Load properties on component mount
+  useEffect(() => {
+    loadProperties();
+  }, []);
+
+  const loadProperties = async (filters?: PropertyFilters) => {
+    try {
+      setLoading(true);
+      const { data, error } = await properties.getProperties(filters, 50, 0);
+      
+      if (error) {
+        console.error('Error loading properties:', error);
+        toast.error('Failed to load properties');
+        return;
+      }
+
+      setListings(data || []);
+      setFilteredCount(data?.length || 0);
+    } catch (error) {
+      console.error('Error loading properties:', error);
+      toast.error('Failed to load properties');
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  const handleSearch = async () => {
+    const filters: PropertyFilters = {};
+    
+    // Location filter
+    if (searchQuery.trim()) {
+      filters.city = searchQuery.trim();
+    }
+    
+    // Price range filter
+    if (priceRange) {
+      switch (priceRange) {
+        case '0-200k':
+          filters.maxPrice = 200000;
+          break;
+        case '200k-350k':
+          filters.minPrice = 200000;
+          filters.maxPrice = 350000;
+          break;
+        case '350k-500k':
+          filters.minPrice = 350000;
+          filters.maxPrice = 500000;
+          break;
+        case '500k+':
+          filters.minPrice = 500000;
+          break;
+      }
+    }
+    
+    // Property type filter
+    if (propertyType) {
+      filters.propertyType = propertyType.replace('-', '_');
+    }
+    
+    // Interest rate filter
+    if (interestRate) {
+      switch (interestRate) {
+        case '0-3':
+          filters.maxInterestRate = 3;
+          break;
+        case '3-4':
+          filters.minInterestRate = 3;
+          filters.maxInterestRate = 4;
+          break;
+        case '4-5':
+          filters.minInterestRate = 4;
+          filters.maxInterestRate = 5;
+          break;
+        case '5+':
+          filters.minInterestRate = 5;
+          break;
+      }
+    }
+    
+    // Immediate feedback for empty filters
+    if (Object.keys(filters).length === 0 && !searchQuery.trim()) {
+      loadProperties(); // Load all properties
+      return;
+    }
+    
+    await loadProperties(filters);
+  };
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setPriceRange('');
+    setPropertyType('');
+    setInterestRate('');
+    loadProperties();
+  };
+
+  const formatPropertyType = (type: string) => {
+    return type.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
+  };
+
+  const hasPropertyImage = (property: Property) => {
+    return property.property_images && property.property_images.length > 0;
+  };
+
+  const getPropertyImage = (property: Property) => {
+    if (hasPropertyImage(property)) {
+      const primaryImage = property.property_images!.find(img => img.is_primary);
+      return primaryImage?.image_url || property.property_images![0].image_url;
+    }
+    return null;
+  };
+
+  const getDaysListed = (createdAt: string) => {
+    const created = new Date(createdAt);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - created.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -148,10 +214,11 @@ export default function SearchPage() {
                     <SelectValue placeholder="Any type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="single-family">Single Family</SelectItem>
+                    <SelectItem value="single_family">Single Family</SelectItem>
                     <SelectItem value="townhouse">Townhouse</SelectItem>
                     <SelectItem value="condo">Condo</SelectItem>
-                    <SelectItem value="multi-family">Multi-Family</SelectItem>
+                    <SelectItem value="multi_family">Multi-Family</SelectItem>
+                    <SelectItem value="duplex">Duplex</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -175,11 +242,11 @@ export default function SearchPage() {
             </div>
             
             <div className="mt-6 flex gap-4">
-              <Button>
+              <Button onClick={handleSearch} disabled={loading}>
                 <Search className="mr-2 h-4 w-4" />
-                Search
+                {loading ? 'Searching...' : 'Search'}
               </Button>
-              <Button variant="outline">
+              <Button variant="outline" onClick={clearFilters}>
                 Clear Filters
               </Button>
             </div>
@@ -189,86 +256,144 @@ export default function SearchPage() {
         {/* Results */}
         <div className="mb-6">
           <p className="text-gray-600">
-            Showing {sampleListings.length} results
+            {loading ? 'Loading...' : `Showing ${filteredCount} results`}
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {sampleListings.map((listing) => (
-            <Card key={listing.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-              <div className="aspect-video bg-gray-200 relative">
-                <img 
-                  src={listing.image} 
-                  alt={listing.address}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute top-4 left-4 flex gap-2">
-                  <Badge className="bg-green-500 hover:bg-green-600">
-                    {listing.interestRate}% Rate
-                  </Badge>
-                  {listing.verified && (
-                    <Badge className="bg-blue-500 hover:bg-blue-600">
-                      Verified
-                    </Badge>
-                  )}
-                </div>
-                <Button 
-                  size="sm" 
-                  variant="secondary" 
-                  className="absolute top-4 right-4"
-                >
-                  <Heart className="h-4 w-4" />
-                </Button>
-              </div>
-              
-              <CardHeader className="pb-3">
-                <div className="flex items-center text-sm text-gray-600 mb-2">
-                  <MapPin className="h-4 w-4 mr-1" />
-                  {listing.address}
-                </div>
-                <CardTitle className="text-lg">{listing.type}</CardTitle>
-              </CardHeader>
-              
-              <CardContent className="space-y-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">
-                    {listing.bedrooms} bed • {listing.bathrooms} bath • {listing.sqft.toLocaleString()} sqft
-                  </span>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <div className="text-gray-600">Current Balance</div>
-                    <div className="font-semibold">${listing.currentBalance.toLocaleString()}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-600">Monthly Payment</div>
-                    <div className="font-semibold">${listing.monthlyPayment.toLocaleString()}</div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-4 border-t">
-                  <div>
-                    <div className="text-sm text-gray-600">Asking Price</div>
-                    <div className="text-xl font-bold text-green-600">
-                      ${listing.askingPrice.toLocaleString()}
+          {loading ? (
+            // Loading skeletons
+            Array.from({ length: 6 }).map((_, index) => (
+              <Card key={index} className="overflow-hidden">
+                <Skeleton className="aspect-video w-full" />
+                <CardHeader className="pb-3">
+                  <Skeleton className="h-4 w-3/4 mb-2" />
+                  <Skeleton className="h-6 w-1/2" />
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Skeleton className="h-4 w-full" />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Skeleton className="h-3 w-full mb-1" />
+                      <Skeleton className="h-4 w-3/4" />
+                    </div>
+                    <div>
+                      <Skeleton className="h-3 w-full mb-1" />
+                      <Skeleton className="h-4 w-3/4" />
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm text-gray-600">Listed</div>
-                    <div className="text-sm font-semibold">{listing.daysListed} days ago</div>
+                  <Skeleton className="h-10 w-full" />
+                </CardContent>
+              </Card>
+            ))
+          ) : listings.length === 0 ? (
+            // No results state
+            <div className="col-span-full text-center py-12">
+              <Home className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No properties found</h3>
+              <p className="text-gray-600 mb-4">
+                Try adjusting your search filters or check back later for new listings.
+              </p>
+              <Button onClick={clearFilters} variant="outline">
+                Clear All Filters
+              </Button>
+            </div>
+          ) : (
+            // Real listings
+            listings.map((listing) => (
+              <Card key={listing.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                <div className="aspect-video bg-gray-200 relative">
+                  {hasPropertyImage(listing) ? (
+                    <img 
+                      src={getPropertyImage(listing)!} 
+                      alt={`${listing.address}, ${listing.city}, ${listing.state}`}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        // Hide broken images gracefully
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-300 flex items-center justify-center">
+                      <div className="text-center">
+                        <Home className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+                        <p className="text-gray-500 text-sm font-medium">
+                          {formatPropertyType(listing.property_type)}
+                        </p>
+                        <p className="text-gray-400 text-xs mt-1">
+                          No image available
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  <div className="absolute top-4 left-4 flex gap-2">
+                    <Badge className="bg-green-500 hover:bg-green-600">
+                      {listing.interest_rate}% Rate
+                    </Badge>
+                    {listing.profiles?.verified && (
+                      <Badge className="bg-blue-500 hover:bg-blue-600">
+                        Verified
+                      </Badge>
+                    )}
                   </div>
+                  <Button 
+                    size="sm" 
+                    variant="secondary" 
+                    className="absolute top-4 right-4"
+                  >
+                    <Heart className="h-4 w-4" />
+                  </Button>
                 </div>
+                
+                <CardHeader className="pb-3">
+                  <div className="flex items-center text-sm text-gray-600 mb-2">
+                    <MapPin className="h-4 w-4 mr-1" />
+                    {listing.address}, {listing.city}, {listing.state} {listing.zip_code}
+                  </div>
+                  <CardTitle className="text-lg">{formatPropertyType(listing.property_type)}</CardTitle>
+                </CardHeader>
+                
+                <CardContent className="space-y-4">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">
+                      {listing.bedrooms} bed • {listing.bathrooms} bath{listing.square_feet ? ` • ${listing.square_feet.toLocaleString()} sqft` : ''}
+                    </span>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <div className="text-gray-600">Current Balance</div>
+                      <div className="font-semibold">${listing.current_loan_balance.toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-600">Monthly Payment</div>
+                      <div className="font-semibold">${listing.monthly_payment.toLocaleString()}</div>
+                    </div>
+                  </div>
 
-                <Button className="w-full" asChild>
-                  <Link href={`/listing/${listing.id}`}>
-                    View Details
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+                  <div className="flex items-center justify-between pt-4 border-t">
+                    <div>
+                      <div className="text-sm text-gray-600">Asking Price</div>
+                      <div className="text-xl font-bold text-green-600">
+                        ${listing.asking_price.toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm text-gray-600">Listed</div>
+                      <div className="text-sm font-semibold">{getDaysListed(listing.created_at)} days ago</div>
+                    </div>
+                  </div>
+
+                  <Button className="w-full" asChild>
+                    <Link href={`/property/${listing.id}`}>
+                      View Details
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            ))
+          )}
         </div>
       </div>
     </div>

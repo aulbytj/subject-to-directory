@@ -1,17 +1,5 @@
-import { createBrowserClient } from '@supabase/ssr';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-// Create a singleton browser client to prevent multiple instances
-let supabaseInstance: ReturnType<typeof createBrowserClient> | null = null;
-
-export const supabase = (() => {
-  if (!supabaseInstance) {
-    supabaseInstance = createBrowserClient(supabaseUrl, supabaseAnonKey);
-  }
-  return supabaseInstance;
-})();
+// Re-export the main client for backward compatibility
+export { getSupabaseClient as supabase } from './supabase-client';
 
 // Types for our database
 export interface Profile {
