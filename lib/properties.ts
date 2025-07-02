@@ -222,9 +222,9 @@ export const properties = {
     return { data: data as Property[], error };
   },
 
-  // Get featured properties
+  // Get featured properties (PUBLIC - no auth required)
   async getFeaturedProperties(limit = 6) {
-    const { data, error } = await supabase
+    const { data, error } = await publicSupabase
       .from('properties')
       .select(`
         *,
@@ -247,9 +247,9 @@ export const properties = {
     return { data: data as Property[], error };
   },
 
-  // Search properties
+  // Search properties (PUBLIC - no auth required)
   async searchProperties(searchTerm: string, limit = 20) {
-    const { data, error } = await supabase
+    const { data, error } = await publicSupabase
       .from('properties')
       .select(`
         *,
