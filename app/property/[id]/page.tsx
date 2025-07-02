@@ -342,6 +342,14 @@ export default function PropertyDetailPage() {
                 </div>
 
                 <div className="absolute top-4 right-4 flex gap-2">
+                  {/* Show edit button if user owns this property */}
+                  {property.user_id === user?.id && (
+                    <Button size="sm" variant="default" asChild>
+                      <Link href={`/property/${property.id}/edit`}>
+                        Edit Property
+                      </Link>
+                    </Button>
+                  )}
                   <Button 
                     size="sm" 
                     variant="secondary"

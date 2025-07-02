@@ -74,9 +74,9 @@ export const properties = {
     return { data: data as Property[], error };
   },
 
-  // Get single property by ID (PUBLIC - no auth required)
+  // Get single property by ID (uses authenticated client for better access)
   async getProperty(id: string) {
-    const { data, error } = await publicSupabase
+    const { data, error } = await authSupabase
       .from('properties')
       .select(`
         *,
